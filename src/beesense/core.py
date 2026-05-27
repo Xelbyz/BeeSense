@@ -33,3 +33,6 @@ def read_mcp9808_example(address: int = 0x18, bus_num: int = 1, samples: int = 1
     finally:
         dev.close()
 
+
+if __name__ == "__main__":
+    main()
