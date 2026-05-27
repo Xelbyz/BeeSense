@@ -14,7 +14,7 @@ def hello() -> str:
 
 def read_mcp9808_example(address: int = 0x18, bus_num: int = 1, samples: int = 1) -> None:
     try:
-        from .mcp9808 import MCP9808
+        from mcp9808 import MCP9808
     except Exception as exc:
         print("MCP9808 driver unavailable:", exc)
         return
