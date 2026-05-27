@@ -4,6 +4,7 @@
 def main() -> None:
     """Entry point for the BeeSense package."""
     print("BeeSense is ready to run.")
+    read_mcp9808_example();
 
 
 def hello() -> str:
@@ -12,11 +13,6 @@ def hello() -> str:
 
 
 def read_mcp9808_example(address: int = 0x18, bus_num: int = 1, samples: int = 1) -> None:
-    """Example routine that reads temperature from an MCP9808 sensor.
-
-    This function imports the `MCP9808` driver lazily so the package can
-    still be imported on machines without I2C hardware.
-    """
     try:
         from .mcp9808 import MCP9808
     except Exception as exc:
