@@ -14,7 +14,7 @@ def hello() -> str:
 
 def read_mcp9808_example(address: int = 0x18, bus_num: int = 1, samples: int = 1) -> None:
     try:
-        from .mcp9808 import MCP9808
+        from mcp9808 import MCP9808
     except Exception as exc:
         print("MCP9808 driver unavailable:", exc)
         return
@@ -32,7 +32,7 @@ def read_mcp9808_example(address: int = 0x18, bus_num: int = 1, samples: int = 1
 
 def read_light_sensor_example(data_pin: int = 17, active_low: bool = False, samples: int = 5, interval: float = 1.0) -> None:
     try:
-        from .light_sensor import LightSensor
+        from light_sensor import LightSensor
     except Exception as exc:
         print("Light sensor driver unavailable:", exc)
         return
