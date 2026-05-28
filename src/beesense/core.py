@@ -3,9 +3,9 @@
 import asyncio
 import time
 try:
-    from beesense.rest_api import send_inside_temp, send_outside_temp
+    from beesense.rest_api import send_inside_temp, send_outside_temp, send_bee_counter
 except ImportError:
-    from rest_api import send_inside_temp, send_outside_temp
+    from rest_api import send_inside_temp, send_outside_temp, send_bee_counter
 
 LOOP_INTERVAL_SECONDS = 60
 LIGHT_INTERVAL_SECONDS = 0.1
@@ -64,6 +64,7 @@ async def _light_loop(loop: asyncio.AbstractEventLoop) -> None:
                 status = IDLE
             elif light_pin17 and light_pin27:
                 print("Bee has left the sensor area, increment enter count")
+                send_bee_counter(1)  # Send to API
                 status = IDLE
         elif status == WAIT_FOR_LEAVE_EXIT:
             if light_pin27 and not light_pin17:
@@ -71,6 +72,7 @@ async def _light_loop(loop: asyncio.AbstractEventLoop) -> None:
                 status = IDLE
             elif light_pin17 and light_pin27:
                 print("Bee has left the sensor area, increment exit count")
+                send_bee_counter(-1)  # Send to API
                 status = IDLE
 
         # TODO: add processing on light_pin17 and light_pin27 here
