@@ -172,7 +172,7 @@ def summarize_fft(
 	mags: list[tuple[float, float]] = []
 	for k in range(half + 1):
 		freq = k * rate / n_fft
-		mag = (abs(spectrum[k]) / n) ** 2
+		mag = (abs(spectrum[k]) / n)
 		mags.append((freq, mag))
 
 	results: list[tuple[float, float, float]] = []
