@@ -62,95 +62,6 @@ def fft_radix2(values: list[complex]) -> list[complex]:
 
 	return result
 
-
-def parse_args() -> argparse.Namespace:
-	parser = argparse.ArgumentParser(
-		description="Capture SPH0645 data every 10s and print FFT summaries"
-	)
-	parser.add_argument(
-		"--device",
-		default="hw:2,0",
-		help="ALSA capture device (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--interval",
-		type=float,
-		default=10.0,
-		help="Time between captures in seconds (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--capture-seconds",
-		type=float,
-		default=2.0,
-		help="Capture length per cycle in seconds (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--skip-seconds",
-		type=float,
-		default=1.0,
-		help="Seconds to skip from the start of each capture (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--rate",
-		type=int,
-		default=48_000,
-		help="Sample rate in Hz (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--channels",
-		type=int,
-		default=2,
-		help="Capture channels expected by ALSA device (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--data-channel",
-		type=int,
-		default=0,
-		help="Interleaved channel index containing mic data (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--window",
-		choices=["hann", "hamming"],
-		default="hann",
-		help="FFT window function (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--bin-width",
-		type=float,
-		default=50.0,
-		help="Frequency summary bin width in Hz (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--gain",
-		type=float,
-		default=100.0,
-		help="Linear gain applied before FFT (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--min-mag",
-		type=float,
-		default=1e-4,
-		help="Only print bins with magnitude >= this value (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--cycles",
-		type=int,
-		default=0,
-		help="Number of cycles to run. 0 means run forever (default: %(default)s)",
-	)
-	parser.add_argument(
-		"--list-devices",
-		action="store_true",
-		help="List ALSA capture devices via arecord -l and exit",
-	)
-	parser.add_argument(
-		"--dump-wav",
-		default="bee-audio.wav",
-		help="Write each captured chunk to this WAV file (default: %(default)s)",
-	)
-	return parser.parse_args()
-
-
 def window_value(kind: str, i: int, n: int) -> float:
 	if n <= 1:
 		return 1.0
@@ -257,7 +168,7 @@ def summarize_fft(
 	mags: list[tuple[float, float]] = []
 	for k in range(half + 1):
 		freq = k * rate / n_fft
-		mag = abs(spectrum[k]) / n
+		mag = (abs(spectrum[k]) / n) ** 2
 		mags.append((freq, mag))
 
 	results: list[tuple[float, float, float]] = []
@@ -298,7 +209,7 @@ def do_sound() -> int:
 	channels = 2
 	data_channel = 0
 	window = "hann"
-	bin_width = 50.0
+	bin_width = 100.0
 	gain = 100.0
 	min_mag = 1e-4
 	cycles = 0
