@@ -9,7 +9,7 @@ from flask import Flask, jsonify, request
 
 app = Flask(__name__)
 
-BASE_URL = os.environ.get("BEESENSE_API_BASE_URL", "https://phactoutdev11.phact.nl").rstrip("/")
+BASE_URL = os.environ.get("BEESENSE_API_BASE_URL", "https://outsystems.phact.nl").rstrip("/")
 API_BASE_PATH = "/BeeSense/rest/BeeSenseAPI"
 
 
