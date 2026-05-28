@@ -19,6 +19,8 @@ import sys
 import time
 import wave
 
+from beesense.rest_api import send_sound
+
 
 def next_power_of_two(n: int) -> int:
 	value = 1
@@ -280,6 +282,7 @@ def print_fft_summary(
 	for start, end, mag in summary:
 		if mag >= min_mag  and start > 0.0:
 			print(f"  {start:6.1f}-{end:6.1f} Hz: {mag:.6f}")
+			send_sound(mag, int(start // bin_width_hz))  # Send to API
 			printed = True
 	if not printed:
 		print(f"  No bins with magnitude >= {min_mag:.6f}.")
@@ -389,7 +392,6 @@ def do_sound() -> int:
 		print_fft_summary(summary, bin_width, min_mag)
 
 		next_tick += interval
-		time.sleep(max(0.0, next_tick - time.monotonic()))
 	except KeyboardInterrupt:
 		print("\nStopped by user.")
 		return 0
