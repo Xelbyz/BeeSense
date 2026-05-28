@@ -7,11 +7,16 @@ from beesense.rest_api import send_inside_temp, send_outside_temp
 def main() -> None:
     """Entry point for the BeeSense package."""
     print("BeeSense is ready to run.")
+    read_mcp9808_example(address=0x18)
+    read_mcp9808_example(address=0x19)
+    read_light_sensor_example(data_pin=17, active_low=True)
+    read_light_sensor_example(data_pin=27, active_low=True)
 
-    """Temperature sensors"""
-    """sensortype=1: inside sensortype=2: outside"""
-    read_mcp9808_example(1, address=0x18); 
-    read_mcp9808_example(2, address=0x19);
+
+def hello() -> str:
+    """Return a simple greeting string."""
+    return "Hello from BeeSense!"
+
 
 def read_mcp9808_example(sensortype: int = 1, address: int = 0x18, bus_num: int = 1, samples: int = 1, interval_seconds: float = 10.0) -> None:
     try:

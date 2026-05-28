@@ -9,18 +9,21 @@
       "cwd": "${workspaceFolder}/src/beesense",
       "console": "integratedTerminal",
       "justMyCode": true
-    }
-  ]
-}
-
-{
-  "version": "0.2.0",
-  "configurations": [
+    },
     {
       "name": "Python: sph0645.py",
       "type": "debugpy",
       "request": "launch",
       "program": "${workspaceFolder}/src/beesense/sph0645.py",
+      "cwd": "${workspaceFolder}/src/beesense",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Python: light_sensor.py",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/src/beesense/light_sensor.py",
       "cwd": "${workspaceFolder}/src/beesense",
       "console": "integratedTerminal",
       "justMyCode": true
