@@ -9,6 +9,7 @@ except ImportError:
 
 LOOP_INTERVAL_SECONDS = 60
 LIGHT_INTERVAL_SECONDS = 0.1
+SOUND_INTERVAL_SECONDS = 10
 
 
 async def _temperature_loop(loop: asyncio.AbstractEventLoop) -> None:
@@ -76,6 +77,21 @@ async def _light_loop(loop: asyncio.AbstractEventLoop) -> None:
         await asyncio.sleep(LIGHT_INTERVAL_SECONDS)
 
 
+async def _sound_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """Run do_sound from sph0645 every 10 seconds."""
+    try:
+        from sph0645 import do_sound
+    except ImportError:
+        try:
+            from beesense.sph0645 import do_sound
+        except ImportError as exc:
+            print(f"sph0645 unavailable, sound loop disabled: {exc}")
+            return
+    while True:
+        await loop.run_in_executor(None, do_sound)
+        await asyncio.sleep(SOUND_INTERVAL_SECONDS)
+
+
 async def main_async() -> None:
     """Async entry point: runs temperature and light sensor loops concurrently."""
     print("BeeSense is ready to run.")
@@ -83,6 +99,7 @@ async def main_async() -> None:
     await asyncio.gather(
         _temperature_loop(loop),
         _light_loop(loop),
+        _sound_loop(loop),
     )
 
 

@@ -285,107 +285,111 @@ def print_fft_summary(
 		print(f"  No bins with magnitude >= {min_mag:.6f}.")
 
 
-def main() -> int:
-	args = parse_args()
+def do_sound() -> int:
 
-	if args.list_devices:
-		return list_devices()
+	device = "hw:2,0"
+	interval = 10.0
+	capture_seconds = 2.0
+	skip_seconds = 1.0
+	rate = 48_000
+	channels = 2
+	data_channel = 0
+	window = "hann"
+	bin_width = 50.0
+	gain = 100.0
+	min_mag = 1e-4
+	cycles = 0
+	dump_wav = "bee-audio.wav"
 
 	if shutil.which("arecord") is None:
 		print("Error: 'arecord' not found. Install ALSA utils: sudo apt install alsa-utils")
 		return 1
 
-	if args.interval <= 0:
+	if interval <= 0:
 		print("Error: --interval must be > 0")
 		return 1
-	if args.capture_seconds <= 0:
+	if capture_seconds <= 0:
 		print("Error: --capture-seconds must be > 0")
 		return 1
-	if args.skip_seconds < 0:
+	if skip_seconds < 0:
 		print("Error: --skip-seconds must be >= 0")
 		return 1
-	if args.skip_seconds >= args.capture_seconds:
+	if skip_seconds >= capture_seconds:
 		print("Error: --skip-seconds must be less than --capture-seconds")
 		return 1
-	if args.rate <= 0:
+	if rate <= 0:
 		print("Error: --rate must be > 0")
 		return 1
-	if args.channels <= 0:
+	if channels <= 0:
 		print("Error: --channels must be > 0")
 		return 1
-	if args.data_channel < 0 or args.data_channel >= args.channels:
+	if data_channel < 0 or data_channel >= channels:
 		print("Error: --data-channel must be within [0, --channels)")
 		return 1
-	if args.bin_width <= 0:
+	if bin_width <= 0:
 		print("Error: --bin-width must be > 0")
 		return 1
-	if args.gain <= 0:
+	if gain <= 0:
 		print("Error: --gain must be > 0")
 		return 1
-	if args.min_mag < 0:
+	if min_mag < 0:
 		print("Error: --min-mag must be >= 0")
 		return 1
-	if args.cycles < 0:
+	if cycles < 0:
 		print("Error: --cycles must be >= 0")
 		return 1
 
 	print("SPH0645 periodic FFT analyzer")
 	print(
-		f"Device={args.device}, rate={args.rate} Hz, capture={args.capture_seconds}s, "
-		f"skip={args.skip_seconds}s, interval={args.interval}s, window={args.window}, "
-		f"bin={args.bin_width} Hz, gain={args.gain}x, min_mag={args.min_mag}"
+		f"Device={device}, rate={rate} Hz, capture={capture_seconds}s, "
+		f"skip={skip_seconds}s, interval={interval}s, window={window}, "
+		f"bin={bin_width} Hz, gain={gain}x, min_mag={min_mag}"
 	)
-	print(f"WAV dump path: {args.dump_wav}")
+	print(f"WAV dump path: {dump_wav}")
 	print("Press Ctrl+C to stop.")
 
-	cycle = 0
 	next_tick = time.monotonic()
 	try:
-		while args.cycles == 0 or cycle < args.cycles:
-			cycle += 1
-			stamp = time.strftime("%Y-%m-%d %H:%M:%S")
-			print(f"\n[{stamp}] Cycle {cycle}")
-
-			try:
-				raw = capture_raw(args.device, args.rate, args.channels, args.capture_seconds)
-			except RuntimeError as exc:
-				print(f"Capture failed: {exc}")
-				next_tick += args.interval
-				time.sleep(max(0.0, next_tick - time.monotonic()))
-				continue
-
-			skip_bytes = int(args.skip_seconds * args.rate) * args.channels * 4
-			raw_trimmed = raw[skip_bytes:]
-
-			try:
-				write_wav(raw_trimmed, args.dump_wav, args.channels, args.rate)
-			except Exception as exc:
-				print(f"Failed to write WAV dump '{args.dump_wav}': {exc}")
-			else:
-				print(f"Saved capture to {args.dump_wav}")
-
-			samples = extract_channel_int32(raw_trimmed, args.channels, args.data_channel)
-			if not samples:
-				print("No samples captured from selected data channel.")
-				next_tick += args.interval
-				time.sleep(max(0.0, next_tick - time.monotonic()))
-				continue
-
-			peak_abs = max(abs(s) for s in samples)
-			peak_db = 20 * math.log10(peak_abs) if peak_abs > 0.0 else float("-inf")
-			print(f"Peak: {peak_abs:.6f}  ({peak_db:.1f} dBFS)")
-
-			summary = summarize_fft(
-				samples=samples,
-				rate=args.rate,
-				window_kind=args.window,
-				bin_width_hz=args.bin_width,
-				gain=args.gain,
-			)
-			print_fft_summary(summary, args.bin_width, args.min_mag)
-
-			next_tick += args.interval
+		try:
+			raw = capture_raw(device, rate, channels, capture_seconds)
+		except RuntimeError as exc:
+			print(f"Capture failed: {exc}")
+			next_tick += interval
 			time.sleep(max(0.0, next_tick - time.monotonic()))
+			return 1
+
+		skip_bytes = int(skip_seconds * rate) * channels * 4
+		raw_trimmed = raw[skip_bytes:]
+
+		try:
+			write_wav(raw_trimmed, dump_wav, channels, rate)
+		except Exception as exc:
+			print(f"Failed to write WAV dump '{dump_wav}': {exc}")
+		else:
+			print(f"Saved capture to {dump_wav}")
+
+		samples = extract_channel_int32(raw_trimmed, channels, data_channel)
+		if not samples:
+			print("No samples captured from selected data channel.")
+			next_tick += interval
+			time.sleep(max(0.0, next_tick - time.monotonic()))
+			return 1
+
+		peak_abs = max(abs(s) for s in samples)
+		peak_db = 20 * math.log10(peak_abs) if peak_abs > 0.0 else float("-inf")
+		print(f"Peak: {peak_abs:.6f}  ({peak_db:.1f} dBFS)")
+
+		summary = summarize_fft(
+			samples=samples,
+			rate=rate,
+			window_kind=window,
+			bin_width_hz=bin_width,
+			gain=gain,
+		)
+		print_fft_summary(summary, bin_width, min_mag)
+
+		next_tick += interval
+		time.sleep(max(0.0, next_tick - time.monotonic()))
 	except KeyboardInterrupt:
 		print("\nStopped by user.")
 		return 0
