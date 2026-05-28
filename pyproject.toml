@@ -19,6 +19,8 @@ classifiers = [
   "Operating System :: OS Independent"
 ]
 dependencies = [
+  "Flask>=3.0.0",
+  "requests>=2.31.0",
   "RPi.GPIO>=0.7.0"
 ]
 
