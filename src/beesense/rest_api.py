@@ -71,3 +71,18 @@ def send_sound_route():
     """POST /SendSound consumer endpoint."""
     return send_sound()
 
+
+def send_bee_counter(delta: int | None = None) -> tuple[object, int]:
+    """Send bee counter data to the BeeSense API."""
+    if delta is None:
+        delta = request.args.get("Delta", type=int)
+    if delta is None:
+        return jsonify({"error": "Delta is required."}), 400
+    return _post_to_consumer("SendBeeCounter", {"Delta": delta})
+
+
+@app.post("/BeeSense/rest/BeeSenseAPI/SendBeeCounter")
+def send_bee_counter_route():
+    """POST /SendBeeCounter consumer endpoint."""
+    return send_bee_counter()
+
