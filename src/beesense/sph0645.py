@@ -19,8 +19,12 @@ import sys
 import time
 import wave
 
-from beesense.rest_api import send_sound
 
+
+try:
+    from beesense.rest_api import send_sound
+except ImportError:
+    from rest_api import send_sound
 
 def next_power_of_two(n: int) -> int:
 	value = 1
