@@ -1,86 +1,162 @@
 #!/usr/bin/env python3
-"""Record audio from an SPH0645 I2S microphone on Raspberry Pi.
+"""Periodic SPH0645 FFT analyzer for Raspberry Pi I2S.
 
-This script uses ALSA's ``arecord`` command so it does not require extra
-Python audio packages. It captures raw 32-bit PCM samples, writes them to a
-WAV file, and prints a live level meter in dBFS.
+Behavior:
+- Every 10 seconds, capture 1 second of audio at 48 kHz from ALSA.
+- Apply a window (Hann by default).
+- Run FFT and summarize magnitude in 100 Hz bands.
 """
 
 from __future__ import annotations
 
 import argparse
+import cmath
 import math
 import shutil
 import struct
 import subprocess
 import sys
+import time
 import wave
+
+
+def next_power_of_two(n: int) -> int:
+	value = 1
+	while value < n:
+		value <<= 1
+	return value
+
+
+def fft_radix2(values: list[complex]) -> list[complex]:
+	"""Iterative radix-2 FFT for power-of-two lengths."""
+	n = len(values)
+	if n == 0 or (n & (n - 1)) != 0:
+		raise ValueError("FFT input length must be a power of two")
+
+	# Bit-reversal permutation
+	result = values[:]
+	j = 0
+	for i in range(1, n):
+		bit = n >> 1
+		while j & bit:
+			j ^= bit
+			bit >>= 1
+		j ^= bit
+		if i < j:
+			result[i], result[j] = result[j], result[i]
+
+	length = 2
+	while length <= n:
+		half = length // 2
+		twiddle_step = -2.0j * math.pi / length
+		for start in range(0, n, length):
+			for k in range(half):
+				twiddle = cmath.exp(twiddle_step * k)
+				even = result[start + k]
+				odd = result[start + k + half] * twiddle
+				result[start + k] = even + odd
+				result[start + k + half] = even - odd
+		length <<= 1
+
+	return result
 
 
 def parse_args() -> argparse.Namespace:
 	parser = argparse.ArgumentParser(
-		description="Record from SPH0645 I2S mic and save to WAV"
+		description="Capture SPH0645 data every 10s and print FFT summaries"
 	)
 	parser.add_argument(
-		"-o",
-		"--output",
-		default="sph0645_recording.wav",
-		help="Output WAV path (default: %(default)s)",
+		"--device",
+		default="hw:2,0",
+		help="ALSA capture device (default: %(default)s)",
 	)
 	parser.add_argument(
-		"-d",
-		"--duration",
+		"--interval",
 		type=float,
-		default=5.0,
-		help="Recording duration in seconds (default: %(default)s)",
+		default=10.0,
+		help="Time between captures in seconds (default: %(default)s)",
 	)
 	parser.add_argument(
-		"-r",
+		"--capture-seconds",
+		type=float,
+		default=2.0,
+		help="Capture length per cycle in seconds (default: %(default)s)",
+	)
+	parser.add_argument(
+		"--skip-seconds",
+		type=float,
+		default=1.0,
+		help="Seconds to skip from the start of each capture (default: %(default)s)",
+	)
+	parser.add_argument(
 		"--rate",
 		type=int,
 		default=48_000,
 		help="Sample rate in Hz (default: %(default)s)",
 	)
 	parser.add_argument(
-		"-c",
 		"--channels",
 		type=int,
-		default=1,
-		help="Number of channels (default: %(default)s)",
+		default=2,
+		help="Capture channels expected by ALSA device (default: %(default)s)",
 	)
 	parser.add_argument(
-		"--device",
-		default="plughw:1,0",
-		help="ALSA capture device (default: %(default)s)",
+		"--data-channel",
+		type=int,
+		default=0,
+		help="Interleaved channel index containing mic data (default: %(default)s)",
+	)
+	parser.add_argument(
+		"--window",
+		choices=["hann", "hamming"],
+		default="hann",
+		help="FFT window function (default: %(default)s)",
+	)
+	parser.add_argument(
+		"--bin-width",
+		type=float,
+		default=50.0,
+		help="Frequency summary bin width in Hz (default: %(default)s)",
+	)
+	parser.add_argument(
+		"--gain",
+		type=float,
+		default=100.0,
+		help="Linear gain applied before FFT (default: %(default)s)",
+	)
+	parser.add_argument(
+		"--min-mag",
+		type=float,
+		default=1e-4,
+		help="Only print bins with magnitude >= this value (default: %(default)s)",
+	)
+	parser.add_argument(
+		"--cycles",
+		type=int,
+		default=0,
+		help="Number of cycles to run. 0 means run forever (default: %(default)s)",
 	)
 	parser.add_argument(
 		"--list-devices",
 		action="store_true",
 		help="List ALSA capture devices via arecord -l and exit",
 	)
+	parser.add_argument(
+		"--dump-wav",
+		default="bee-audio.wav",
+		help="Write each captured chunk to this WAV file (default: %(default)s)",
+	)
 	return parser.parse_args()
 
 
-def rms_dbfs_int32_le(chunk: bytes) -> float:
-	if len(chunk) < 4:
-		return float("-inf")
-
-	sample_count = len(chunk) // 4
-	samples = struct.unpack("<" + "i" * sample_count, chunk[: sample_count * 4])
-	if not samples:
-		return float("-inf")
-
-	sum_sq = 0.0
-	for s in samples:
-		v = float(s)
-		sum_sq += v * v
-
-	rms = math.sqrt(sum_sq / len(samples))
-	if rms <= 0.0:
-		return float("-inf")
-
-	# int32 full scale reference
-	return 20.0 * math.log10(rms / 2147483648.0)
+def window_value(kind: str, i: int, n: int) -> float:
+	if n <= 1:
+		return 1.0
+	angle = 2.0 * math.pi * i / (n - 1)
+	if kind == "hamming":
+		return 0.54 - 0.46 * math.cos(angle)
+	# Hann is a robust default for spectral analysis with lower leakage.
+	return 0.5 * (1.0 - math.cos(angle))
 
 
 def list_devices() -> int:
@@ -90,6 +166,123 @@ def list_devices() -> int:
 		print("Error: 'arecord' not found. Install ALSA utils: sudo apt install alsa-utils")
 		return 1
 	return result.returncode
+
+
+def capture_raw(
+	device: str,
+	rate: int,
+	channels: int,
+	seconds: float,
+	retries: int = 5,
+	retry_delay: float = 2.0,
+) -> bytes:
+	seconds_for_arecord = int(round(seconds))
+	if seconds_for_arecord <= 0:
+		raise RuntimeError("capture duration must round to at least 1 second")
+
+	cmd = [
+		"arecord",
+		"-D",
+		device,
+		"-f",
+		"S32_LE",
+		"-c",
+		str(channels),
+		"-r",
+		str(rate),
+		"-d",
+		str(seconds_for_arecord),
+		"-t",
+		"raw",
+		"-q",
+	]
+	last_error = ""
+	for attempt in range(1, retries + 1):
+		try:
+			return subprocess.check_output(cmd, stderr=subprocess.PIPE)
+		except subprocess.CalledProcessError as exc:
+			last_error = exc.stderr.decode("utf-8", errors="replace").strip()
+			if "busy" in last_error.lower() or "resource" in last_error.lower():
+				print(f"  Device busy (attempt {attempt}/{retries}), retrying in {retry_delay:.0f}s...")
+				time.sleep(retry_delay)
+			else:
+				raise RuntimeError(last_error or "arecord failed") from exc
+	raise RuntimeError(f"Device still busy after {retries} attempts: {last_error}")
+
+
+def extract_channel_int32(raw: bytes, channels: int, data_channel: int) -> list[float]:
+	if channels <= 0:
+		raise ValueError("channels must be > 0")
+	if data_channel < 0 or data_channel >= channels:
+		raise ValueError("data_channel must be in [0, channels)")
+
+	total_samples = len(raw) // 4
+	if total_samples == 0:
+		return []
+
+	all_samples = struct.unpack("<" + "i" * total_samples, raw[: total_samples * 4])
+	selected = all_samples[data_channel::channels]
+	return [float(s) / 2147483648.0 for s in selected]
+
+
+def write_wav(raw: bytes, out_path: str, channels: int, rate: int) -> None:
+	with wave.open(out_path, "wb") as wav_file:
+		wav_file.setnchannels(channels)
+		wav_file.setsampwidth(4)  # S32_LE
+		wav_file.setframerate(rate)
+		wav_file.writeframes(raw)
+
+
+def summarize_fft(
+	samples: list[float],
+	rate: int,
+	window_kind: str,
+	bin_width_hz: float,
+	gain: float,
+) -> list[tuple[float, float, float]]:
+	if not samples:
+		return []
+	n = len(samples)
+	windowed = [samples[i] * gain * window_value(window_kind, i, n) for i in range(n)]
+
+	n_fft = next_power_of_two(n)
+	fft_in = [complex(v, 0.0) for v in windowed] + [0j] * (n_fft - n)
+	spectrum = fft_radix2(fft_in)
+
+	nyquist = rate / 2.0
+	half = n_fft // 2
+
+	mags: list[tuple[float, float]] = []
+	for k in range(half + 1):
+		freq = k * rate / n_fft
+		mag = abs(spectrum[k]) / n
+		mags.append((freq, mag))
+
+	results: list[tuple[float, float, float]] = []
+	start = 0.0
+	while start < nyquist:
+		end = min(start + bin_width_hz, nyquist)
+		bucket = [m for f, m in mags if (start <= f < end) or (end == nyquist and f == nyquist)]
+		avg_mag = sum(bucket) / len(bucket) if bucket else 0.0
+		results.append((start, end, avg_mag))
+		start = end
+
+	return results
+
+
+def print_fft_summary(
+	summary: list[tuple[float, float, float]],
+	bin_width_hz: float,
+	min_mag: float,
+) -> None:
+	print(f"Frequency summary (average magnitude per {bin_width_hz:.0f} Hz bin):")
+	printed = False
+	for start, end, mag in summary:
+		if mag >= min_mag  and start > 0.0:
+			print(f"  {start:6.1f}-{end:6.1f} Hz: {mag:.6f}")
+			printed = True
+	if not printed:
+		print(f"  No bins with magnitude >= {min_mag:.6f}.")
 
 
 def main() -> int:
@@ -102,8 +295,17 @@ def main() -> int:
 		print("Error: 'arecord' not found. Install ALSA utils: sudo apt install alsa-utils")
 		return 1
 
-	if args.duration <= 0:
-		print("Error: --duration must be > 0")
+	if args.interval <= 0:
+		print("Error: --interval must be > 0")
+		return 1
+	if args.capture_seconds <= 0:
+		print("Error: --capture-seconds must be > 0")
+		return 1
+	if args.skip_seconds < 0:
+		print("Error: --skip-seconds must be >= 0")
+		return 1
+	if args.skip_seconds >= args.capture_seconds:
+		print("Error: --skip-seconds must be less than --capture-seconds")
 		return 1
 	if args.rate <= 0:
 		print("Error: --rate must be > 0")
@@ -111,83 +313,83 @@ def main() -> int:
 	if args.channels <= 0:
 		print("Error: --channels must be > 0")
 		return 1
+	if args.data_channel < 0 or args.data_channel >= args.channels:
+		print("Error: --data-channel must be within [0, --channels)")
+		return 1
+	if args.bin_width <= 0:
+		print("Error: --bin-width must be > 0")
+		return 1
+	if args.gain <= 0:
+		print("Error: --gain must be > 0")
+		return 1
+	if args.min_mag < 0:
+		print("Error: --min-mag must be >= 0")
+		return 1
+	if args.cycles < 0:
+		print("Error: --cycles must be >= 0")
+		return 1
 
-	chunk_frames = 1024
-	bytes_per_sample = 4  # S32_LE
-	chunk_bytes = chunk_frames * args.channels * bytes_per_sample
-	total_frames_target = int(args.duration * args.rate)
-	total_bytes_target = total_frames_target * args.channels * bytes_per_sample
+	print("SPH0645 periodic FFT analyzer")
+	print(
+		f"Device={args.device}, rate={args.rate} Hz, capture={args.capture_seconds}s, "
+		f"skip={args.skip_seconds}s, interval={args.interval}s, window={args.window}, "
+		f"bin={args.bin_width} Hz, gain={args.gain}x, min_mag={args.min_mag}"
+	)
+	print(f"WAV dump path: {args.dump_wav}")
+	print("Press Ctrl+C to stop.")
 
-	cmd = [
-		"arecord",
-		"-D",
-		args.device,
-		"-f",
-		"S32_LE",
-		"-c",
-		str(args.channels),
-		"-r",
-		str(args.rate),
-		"-t",
-		"raw",
-		"-q",
-	]
+	cycle = 0
+	next_tick = time.monotonic()
+	try:
+		while args.cycles == 0 or cycle < args.cycles:
+			cycle += 1
+			stamp = time.strftime("%Y-%m-%d %H:%M:%S")
+			print(f"\n[{stamp}] Cycle {cycle}")
 
-	print(f"Recording {args.duration:.2f}s from {args.device} at {args.rate} Hz...")
-	print(f"Saving to: {args.output}")
-
-	with wave.open(args.output, "wb") as wav_file:
-		wav_file.setnchannels(args.channels)
-		wav_file.setsampwidth(bytes_per_sample)
-		wav_file.setframerate(args.rate)
-
-		try:
-			proc = subprocess.Popen(
-				cmd,
-				stdout=subprocess.PIPE,
-				stderr=subprocess.PIPE,
-			)
-		except FileNotFoundError:
-			print("Error: Failed to start 'arecord'.")
-			return 1
-
-		captured = 0
-		try:
-			while captured < total_bytes_target:
-				to_read = min(chunk_bytes, total_bytes_target - captured)
-				chunk = proc.stdout.read(to_read) if proc.stdout else b""
-				if not chunk:
-					break
-
-				wav_file.writeframesraw(chunk)
-				captured += len(chunk)
-
-				db = rms_dbfs_int32_le(chunk)
-				meter = "-inf" if math.isinf(db) else f"{db:6.1f} dBFS"
-				print(f"\rLevel: {meter}", end="", flush=True)
-
-		finally:
-			proc.terminate()
 			try:
-				proc.wait(timeout=1.5)
-			except subprocess.TimeoutExpired:
-				proc.kill()
-				proc.wait(timeout=1.5)
+				raw = capture_raw(args.device, args.rate, args.channels, args.capture_seconds)
+			except RuntimeError as exc:
+				print(f"Capture failed: {exc}")
+				next_tick += args.interval
+				time.sleep(max(0.0, next_tick - time.monotonic()))
+				continue
 
-			if proc.stderr:
-				err = proc.stderr.read().decode("utf-8", errors="replace").strip()
-				if err:
-					print(f"\nALSA message: {err}")
+			skip_bytes = int(args.skip_seconds * args.rate) * args.channels * 4
+			raw_trimmed = raw[skip_bytes:]
 
-	print()
+			try:
+				write_wav(raw_trimmed, args.dump_wav, args.channels, args.rate)
+			except Exception as exc:
+				print(f"Failed to write WAV dump '{args.dump_wav}': {exc}")
+			else:
+				print(f"Saved capture to {args.dump_wav}")
 
-	if captured == 0:
-		print("No audio data captured. Check I2S overlay, wiring, and --device value.")
-		print("Tip: run with --list-devices to discover the correct ALSA input.")
-		return 2
+			samples = extract_channel_int32(raw_trimmed, args.channels, args.data_channel)
+			if not samples:
+				print("No samples captured from selected data channel.")
+				next_tick += args.interval
+				time.sleep(max(0.0, next_tick - time.monotonic()))
+				continue
 
-	captured_seconds = captured / (args.channels * bytes_per_sample * args.rate)
-	print(f"Done. Captured {captured_seconds:.2f} seconds.")
+			peak_abs = max(abs(s) for s in samples)
+			peak_db = 20 * math.log10(peak_abs) if peak_abs > 0.0 else float("-inf")
+			print(f"Peak: {peak_abs:.6f}  ({peak_db:.1f} dBFS)")
+
+			summary = summarize_fft(
+				samples=samples,
+				rate=args.rate,
+				window_kind=args.window,
+				bin_width_hz=args.bin_width,
+				gain=args.gain,
+			)
+			print_fft_summary(summary, args.bin_width, args.min_mag)
+
+			next_tick += args.interval
+			time.sleep(max(0.0, next_tick - time.monotonic()))
+	except KeyboardInterrupt:
+		print("\nStopped by user.")
+		return 0
+
 	return 0
 
 

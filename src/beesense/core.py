@@ -5,6 +5,7 @@ def main() -> None:
     """Entry point for the BeeSense package."""
     print("BeeSense is ready to run.")
     read_mcp9808_example()
+    read_mcp9808_example(address=0x19)
 
 
 def hello() -> str:
