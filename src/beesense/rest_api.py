@@ -15,6 +15,7 @@ API_BASE_PATH = "/BeeSense/rest/BeeSenseAPI"
 
 def _post_to_consumer(path: str, params: dict[str, float | int]) -> tuple[object, int]:
     """Send a POST request to the remote BeeSense API."""
+    print(f"Posting to {path} with params: {params}");
     url = f"{BASE_URL}{API_BASE_PATH}/{path}"
     response = requests.post(url, params=params, timeout=10)
     return jsonify({"status": response.status_code, "text": response.text}), response.status_code
@@ -68,6 +69,3 @@ def send_sound_route():
     """POST /SendSound consumer endpoint."""
     return send_sound()
 
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)

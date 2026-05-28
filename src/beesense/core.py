@@ -1,19 +1,19 @@
 """Core functionality for BeeSense."""
 
 
+from beesense.rest_api import send_inside_temp, send_outside_temp
+
+
 def main() -> None:
     """Entry point for the BeeSense package."""
     print("BeeSense is ready to run.")
-    read_mcp9808_example()
-    read_mcp9808_example(address=0x19)
 
+    """Temperature sensors"""
+    """sensortype=1: inside sensortype=2: outside"""
+    read_mcp9808_example(1, address=0x18); 
+    read_mcp9808_example(2, address=0x19);
 
-def hello() -> str:
-    """Return a simple greeting string."""
-    return "Hello from BeeSense!"
-
-
-def read_mcp9808_example(address: int = 0x18, bus_num: int = 1, samples: int = 1) -> None:
+def read_mcp9808_example(sensortype: int = 1, address: int = 0x18, bus_num: int = 1, samples: int = 1) -> None:
     try:
         from mcp9808 import MCP9808
     except Exception as exc:
@@ -24,7 +24,12 @@ def read_mcp9808_example(address: int = 0x18, bus_num: int = 1, samples: int = 1
     try:
         for i in range(max(1, samples)):
             c, f = dev.read_temperature()
-            print(f"MCP9808 temperature: {c:.2f} °C / {f:.2f} °F")
+            if(sensortype == 1):
+                print(f"Inside temperature: {c:.2f} °C / {f:.2f} °F")
+                send_inside_temp(c);  # Send to API
+            elif(sensortype == 2):  
+                print(f"Outside temperature: {c:.2f} °C / {f:.2f} °F")
+                send_outside_temp(c);  # Send to API
     except Exception as exc:
         print("Failed to read MCP9808:", exc)
     finally:
