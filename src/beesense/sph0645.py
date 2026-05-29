@@ -213,46 +213,12 @@ def do_sound() -> int:
 	window = "hann"
 	bin_width = 100.0
 	gain = 300.0
-	min_mag = 1e-4
+	min_mag = -1e-4
 	cycles = 0
 	dump_wav = "bee-audio.wav"
 
 	if shutil.which("arecord") is None:
 		print("Error: 'arecord' not found. Install ALSA utils: sudo apt install alsa-utils")
-		return 1
-
-	if interval <= 0:
-		print("Error: --interval must be > 0")
-		return 1
-	if capture_seconds <= 0:
-		print("Error: --capture-seconds must be > 0")
-		return 1
-	if skip_seconds < 0:
-		print("Error: --skip-seconds must be >= 0")
-		return 1
-	if skip_seconds >= capture_seconds:
-		print("Error: --skip-seconds must be less than --capture-seconds")
-		return 1
-	if rate <= 0:
-		print("Error: --rate must be > 0")
-		return 1
-	if channels <= 0:
-		print("Error: --channels must be > 0")
-		return 1
-	if data_channel < 0 or data_channel >= channels:
-		print("Error: --data-channel must be within [0, --channels)")
-		return 1
-	if bin_width <= 0:
-		print("Error: --bin-width must be > 0")
-		return 1
-	if gain <= 0:
-		print("Error: --gain must be > 0")
-		return 1
-	if min_mag < 0:
-		print("Error: --min-mag must be >= 0")
-		return 1
-	if cycles < 0:
-		print("Error: --cycles must be >= 0")
 		return 1
 
 	print("SPH0645 periodic FFT analyzer")
@@ -312,4 +278,4 @@ def do_sound() -> int:
 
 
 if __name__ == "__main__":
-	sys.exit(main())
+	sys.exit(do_sound())
