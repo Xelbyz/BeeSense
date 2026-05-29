@@ -22,7 +22,7 @@ async def _temperature_loop(loop: asyncio.AbstractEventLoop) -> None:
         await asyncio.sleep(LOOP_INTERVAL_SECONDS)
 
 
-async def _light_loop0(loop: asyncio.AbstractEventLoop, instance: int) -> None:
+async def _light_loop(loop: asyncio.AbstractEventLoop, instance: int) -> None:
     """Read both light sensors concurrently every 100 ms."""
     IDLE = 0
     BEE_ENTERING = 1
@@ -108,8 +108,8 @@ async def main_async() -> None:
     loop = asyncio.get_running_loop()
     await asyncio.gather(
         _temperature_loop(loop),
-        _light_loop0(loop, instance = 0),
-        _light_loop1(loop, instance = 1),
+        _light_loop(loop, instance = 0),
+        _light_loop(loop, instance = 1),
         _sound_loop(loop),
     )
 
