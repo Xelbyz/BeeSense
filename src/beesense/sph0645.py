@@ -212,7 +212,7 @@ def do_sound() -> int:
 	data_channel = 0
 	window = "hann"
 	bin_width = 100.0
-	gain = 300.0
+	gain = 100.0
 	min_mag = -1e-4
 	cycles = 0
 	dump_wav = "bee-audio.wav"
