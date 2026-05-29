@@ -195,7 +195,7 @@ def print_fft_summary(
 	print(f"Frequency summary (average magnitude per {bin_width_hz:.0f} Hz bin):")
 	printed = False
 	for start, end, mag in summary:
-		if mag >= min_mag  and start > 0.0:
+		if mag >= min_mag  and start > 0.0 and start < 16000.0:
 			print(f"  {start:6.1f}-{end:6.1f} Hz: {mag:.6f}")
 			send_sound(mag, int(start // bin_width_hz))  # Send to API
 			printed = True
