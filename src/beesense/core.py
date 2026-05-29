@@ -9,7 +9,7 @@ except ImportError:
 
 LOOP_INTERVAL_SECONDS = 60
 LIGHT_INTERVAL_SECONDS = 0.1
-SOUND_INTERVAL_SECONDS = 10
+SOUND_INTERVAL_SECONDS = 30
 
 
 async def _temperature_loop(loop: asyncio.AbstractEventLoop) -> None:
@@ -22,7 +22,7 @@ async def _temperature_loop(loop: asyncio.AbstractEventLoop) -> None:
         await asyncio.sleep(LOOP_INTERVAL_SECONDS)
 
 
-async def _light_loop(loop: asyncio.AbstractEventLoop) -> None:
+async def _light_loop0(loop: asyncio.AbstractEventLoop, instance: int) -> None:
     """Read both light sensors concurrently every 100 ms."""
     IDLE = 0
     BEE_ENTERING = 1
@@ -32,46 +32,54 @@ async def _light_loop(loop: asyncio.AbstractEventLoop) -> None:
 
     status = IDLE
     while True:
-        light_pin17, light_pin27 = await asyncio.gather(
-            loop.run_in_executor(None, lambda: read_light_sensor_example(data_pin=17, active_low=True, samples=1)),
-            loop.run_in_executor(None, lambda: read_light_sensor_example(data_pin=27, active_low=True, samples=1)),
-        )
-
+        if instance == 0:
+            light_pin_exit, light_pin_enter = await asyncio.gather(
+                loop.run_in_executor(None, lambda: read_light_sensor_example(data_pin=17, active_low=True, samples=1)),
+                loop.run_in_executor(None, lambda: read_light_sensor_example(data_pin=27, active_low=True, samples=1)),
+            )
+        elif instance == 1:
+            light_pin_exit, light_pin_enter = await asyncio.gather(
+                loop.run_in_executor(None, lambda: read_light_sensor_example(data_pin=22, active_low=True, samples=1)),
+                loop.run_in_executor(None, lambda: read_light_sensor_example(data_pin=23, active_low=True, samples=1)),
+            )
+        else:
+            print(f"Invalid light sensor instance: {instance}")
+            return
         if status == IDLE:
-            if light_pin17 and not light_pin27:
-                print("Bee entering detected (pin 17 light, pin 27 dark)")
+            if light_pin_exit and not light_pin_enter:
+                print(f"Bee entering detected light barrier {instance}")
                 status = BEE_ENTERING
-            elif light_pin27 and not light_pin17:
-                print("Bee exiting detected (pin 27 light, pin 17 dark)")
+            elif light_pin_enter and not light_pin_exit:
+                print(f"Bee exiting detected light barrier {instance}")
                 status = BEE_EXITING
         elif status == BEE_ENTERING:
-            if light_pin27 and not light_pin17:
-                print("Bee has fully entered (pin 27 light, pin 17 dark)")
+            if light_pin_enter and not light_pin_exit:
+                print(f"Bee has fully entered light barrier {instance}")
                 status = WAIT_FOR_LEAVE_ENTER
-            elif light_pin27 and light_pin17:
-                print("Bee has left the sensor area prematurely")
+            elif light_pin_enter and light_pin_exit:
+                print(f"Bee has left the sensor area prematurely light barrier {instance}")
                 status = IDLE
         elif status == BEE_EXITING:
-            if light_pin17 and not light_pin27:
-                print("Bee has fully exited (pin 17 light, pin 27 dark)")
+            if light_pin_exit and not light_pin_enter:
+                print(f"Bee has fully exited light barrier {instance}")
                 status = WAIT_FOR_LEAVE_EXIT
-            elif light_pin17 and light_pin27:
-                print("Bee has left the sensor area prematurely")
+            elif light_pin_exit and light_pin_enter:
+                print(f"Bee has left the sensor area prematurely light barrier {instance}")
                 status = IDLE
         elif status == WAIT_FOR_LEAVE_ENTER:
-            if not light_pin27 and light_pin17:
-                print("Bee goes back into the hive")
+            if not light_pin_enter and light_pin_exit:
+                print(f"Bee goes back into the hive light barrier {instance}")
                 status = IDLE
-            elif light_pin17 and light_pin27:
-                print("Bee has left the sensor area, increment enter count")
+            elif light_pin_exit and light_pin_enter:
+                print(f"Bee has left the sensor area, increment enter count light barrier {instance}")
                 send_bee_counter(1)  # Send to API
                 status = IDLE
         elif status == WAIT_FOR_LEAVE_EXIT:
-            if light_pin27 and not light_pin17:
-                print("Bee goes back to the outside")
+            if light_pin_enter and not light_pin_exit:
+                print(f"Bee goes back to the outside light barrier {instance}")
                 status = IDLE
-            elif light_pin17 and light_pin27:
-                print("Bee has left the sensor area, increment exit count")
+            elif light_pin_exit and light_pin_enter:
+                print(f"Bee has left the sensor area, increment exit count light barrier {instance}")
                 send_bee_counter(-1)  # Send to API
                 status = IDLE
 
@@ -100,7 +108,8 @@ async def main_async() -> None:
     loop = asyncio.get_running_loop()
     await asyncio.gather(
         _temperature_loop(loop),
-        _light_loop(loop),
+        _light_loop0(loop, instance = 0),
+        _light_loop1(loop, instance = 1),
         _sound_loop(loop),
     )
 

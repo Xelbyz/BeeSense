@@ -19,8 +19,6 @@ import sys
 import time
 import wave
 
-
-
 try:
     from beesense.rest_api import send_sound
 except ImportError:
@@ -264,7 +262,6 @@ def do_sound() -> int:
 		f"bin={bin_width} Hz, gain={gain}x, min_mag={min_mag}"
 	)
 	print(f"WAV dump path: {dump_wav}")
-	print("Press Ctrl+C to stop.")
 
 	next_tick = time.monotonic()
 	try:
