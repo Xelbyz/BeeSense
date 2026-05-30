@@ -140,6 +140,37 @@ def extract_channel_int32(raw: bytes, channels: int, data_channel: int) -> list[
 	return [float(s) / 2147483648.0 for s in selected]
 
 
+def highpass_filter(samples: list[float], rate: int, cutoff_hz: float = 10.0) -> list[float]:
+	"""4th-order Butterworth high-pass filter (24 dB/octave) via two cascaded biquads."""
+	# Pre-warp cutoff for bilinear transform
+	k = 2.0 * rate
+	omega = k * math.tan(math.pi * cutoff_hz / rate)
+	# 4th-order Butterworth: quadratic-factor alpha = 2*sin((2m-1)*pi/8) for m=1,2
+	alphas = [
+		2.0 * math.sin(1.0 * math.pi / 8.0),  # ≈ 0.7654, Q ≈ 1.307
+		2.0 * math.sin(3.0 * math.pi / 8.0),  # ≈ 1.8478, Q ≈ 0.541
+	]
+	result = list(samples)
+	for alpha in alphas:
+		a0 = k * k + alpha * omega * k + omega * omega
+		b0 =  k * k / a0
+		b1 = -2.0 * k * k / a0
+		b2 =  k * k / a0
+		a1 = 2.0 * (omega * omega - k * k) / a0
+		a2 = (k * k - alpha * omega * k + omega * omega) / a0
+		# Direct Form II Transposed
+		w1 = 0.0
+		w2 = 0.0
+		out: list[float] = []
+		for x in result:
+			y = b0 * x + w1
+			w1 = b1 * x - a1 * y + w2
+			w2 = b2 * x - a2 * y
+			out.append(y)
+		result = out
+	return result
+
+
 def write_wav(raw: bytes, out_path: str, channels: int, rate: int) -> None:
 	with wave.open(out_path, "wb") as wav_file:
 		wav_file.setnchannels(channels)
@@ -250,6 +281,7 @@ def do_sound() -> int:
 			print(f"Saved capture to {dump_wav}")
 
 		samples = extract_channel_int32(raw_trimmed, channels, data_channel)
+		samples = highpass_filter(samples, rate)
 		if not samples:
 			print("No samples captured from selected data channel.")
 			next_tick += interval
